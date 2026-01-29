@@ -107,7 +107,6 @@ A powerful Slack application that automatically detects and helps you prioritize
    SLACK_BOT_TOKEN=xoxb-your-bot-token-here
    SLACK_SIGNING_SECRET=your-signing-secret-here
    SLACK_APP_TOKEN=xapp-your-app-token-here
-   PORT=3000
    ```
 
 6. **Customize priority keywords (optional)**
@@ -166,7 +165,6 @@ Simply send messages containing priority keywords. The app will automatically ad
 | `SLACK_BOT_TOKEN` | Bot User OAuth Token from Slack | Yes |
 | `SLACK_SIGNING_SECRET` | Signing Secret from Slack | Yes |
 | `SLACK_APP_TOKEN` | App-Level Token for Socket Mode | Yes |
-| `PORT` | Port number for the app (default: 3000) | No |
 | `CRITICAL_KEYWORDS` | Comma-separated critical keywords | No |
 | `HIGH_KEYWORDS` | Comma-separated high priority keywords | No |
 | `MEDIUM_KEYWORDS` | Comma-separated medium priority keywords | No |

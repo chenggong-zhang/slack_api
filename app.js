@@ -1,13 +1,23 @@
 require('dotenv').config();
 const { App } = require('@slack/bolt');
 
+// Validate required environment variables
+const requiredEnvVars = ['SLACK_BOT_TOKEN', 'SLACK_SIGNING_SECRET', 'SLACK_APP_TOKEN'];
+const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingVars.length > 0) {
+  console.error('❌ Missing required environment variables:', missingVars.join(', '));
+  console.error('Please check your .env file and ensure all required variables are set.');
+  console.error('See .env.example for reference.');
+  process.exit(1);
+}
+
 // Initialize the Slack app with Socket Mode
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   signingSecret: process.env.SLACK_SIGNING_SECRET,
   socketMode: true,
-  appToken: process.env.SLACK_APP_TOKEN,
-  port: process.env.PORT || 3000
+  appToken: process.env.SLACK_APP_TOKEN
 });
 
 // Priority levels with their corresponding emoji reactions
@@ -28,29 +38,40 @@ const PRIORITY_KEYWORDS = {
 
 /**
  * Detect priority level based on message content
+ * Uses word boundary matching to avoid false positives
+ * Returns the highest priority level found (CRITICAL > HIGH > MEDIUM > LOW)
  * @param {string} text - Message text to analyze
  * @returns {string|null} - Priority level or null if none detected
  */
 function detectPriority(text) {
   const lowerText = text.toLowerCase();
   
-  // Check for critical keywords first
-  if (PRIORITY_KEYWORDS.CRITICAL.some(keyword => lowerText.includes(keyword))) {
+  // Helper function to check if keyword exists as a whole word
+  const hasKeyword = (keywords) => {
+    return keywords.some(keyword => {
+      // Create word boundary regex for the keyword
+      const regex = new RegExp(`\\b${keyword}\\b`, 'i');
+      return regex.test(lowerText);
+    });
+  };
+  
+  // Check for critical keywords first (highest priority)
+  if (hasKeyword(PRIORITY_KEYWORDS.CRITICAL)) {
     return 'CRITICAL';
   }
   
   // Check for high priority keywords
-  if (PRIORITY_KEYWORDS.HIGH.some(keyword => lowerText.includes(keyword))) {
+  if (hasKeyword(PRIORITY_KEYWORDS.HIGH)) {
     return 'HIGH';
   }
   
   // Check for medium priority keywords
-  if (PRIORITY_KEYWORDS.MEDIUM.some(keyword => lowerText.includes(keyword))) {
+  if (hasKeyword(PRIORITY_KEYWORDS.MEDIUM)) {
     return 'MEDIUM';
   }
   
   // Check for low priority keywords
-  if (PRIORITY_KEYWORDS.LOW.some(keyword => lowerText.includes(keyword))) {
+  if (hasKeyword(PRIORITY_KEYWORDS.LOW)) {
     return 'LOW';
   }
   
@@ -76,7 +97,10 @@ async function addPriorityReaction(client, channel, timestamp, priority) {
       console.log(`Added ${priority} priority reaction to message`);
     }
   } catch (error) {
-    console.error('Error adding reaction:', error);
+    // Ignore "already_reacted" errors as they're expected when re-prioritizing
+    if (error.data?.error !== 'already_reacted') {
+      console.error('Error adding reaction:', error);
+    }
   }
 }
 
@@ -138,8 +162,11 @@ function createPriorityButtons() {
 // Listen to all messages in channels where the bot is added
 app.message(async ({ message, client, logger }) => {
   try {
-    // Skip bot messages and message subtypes we don't care about
-    if (message.subtype || message.bot_id) {
+    // Skip bot messages and certain message subtypes
+    // We want to process regular messages and thread_broadcast, but skip edited/deleted messages
+    const ignoredSubtypes = ['message_changed', 'message_deleted', 'message_replied'];
+    
+    if (message.bot_id || message.app_id || (message.subtype && ignoredSubtypes.includes(message.subtype))) {
       return;
     }
 
@@ -158,7 +185,7 @@ app.message(async ({ message, client, logger }) => {
 });
 
 // Slash command to manually prioritize a message
-app.command('/prioritize', async ({ command, ack, respond, client }) => {
+app.command('/prioritize', async ({ command, ack, respond, logger }) => {
   await ack();
 
   try {
@@ -168,7 +195,7 @@ app.command('/prioritize', async ({ command, ack, respond, client }) => {
       response_type: 'ephemeral'
     });
   } catch (error) {
-    console.error('Error responding to /prioritize command:', error);
+    logger.error('Error responding to /prioritize command:', error);
   }
 });
 
@@ -191,7 +218,7 @@ app.command('/priority-keywords', async ({ command, ack, respond }) => {
 
 // Handle priority button clicks
 ['critical', 'high', 'medium', 'low'].forEach(priority => {
-  app.action(`priority_${priority}`, async ({ body, ack, client, respond }) => {
+  app.action(`priority_${priority}`, async ({ body, ack, client, respond, logger }) => {
     await ack();
 
     try {
@@ -199,18 +226,37 @@ app.command('/priority-keywords', async ({ command, ack, respond }) => {
       const priorityInfo = PRIORITY_LEVELS[priorityLevel];
       
       // Get the channel history to find the user's last message
+      // Increased limit to 50 to handle busy channels
       const result = await client.conversations.history({
         channel: body.channel.id,
-        limit: 10
+        limit: 50
       });
 
-      // Find the most recent message from the user (not from bot)
+      // Find the most recent message from the user (not from bot or app)
       const userMessage = result.messages.find(msg => 
-        msg.user === body.user.id && !msg.bot_id && msg.text
+        msg.user === body.user.id && !msg.bot_id && !msg.app_id && msg.text
       );
 
       if (userMessage) {
-        // Add priority reaction to the user's message
+        // Check if message already has a priority reaction
+        const existingPriorityReaction = userMessage.reactions?.find(reaction => 
+          Object.values(PRIORITY_LEVELS).some(level => level.reaction === reaction.name)
+        );
+
+        // Remove existing priority reaction if present
+        if (existingPriorityReaction) {
+          try {
+            await client.reactions.remove({
+              channel: body.channel.id,
+              timestamp: userMessage.ts,
+              name: existingPriorityReaction.name
+            });
+          } catch (error) {
+            logger.error('Error removing existing reaction:', error);
+          }
+        }
+
+        // Add new priority reaction to the user's message
         await addPriorityReaction(client, body.channel.id, userMessage.ts, priorityLevel);
         
         await respond({
@@ -220,13 +266,13 @@ app.command('/priority-keywords', async ({ command, ack, respond }) => {
         });
       } else {
         await respond({
-          text: '❌ Could not find a recent message to prioritize. Please send a message first.',
+          text: '❌ Could not find a recent message to prioritize. Please send a message first, or try again in a less busy channel.',
           response_type: 'ephemeral',
           replace_original: true
         });
       }
     } catch (error) {
-      console.error(`Error handling priority_${priority} action:`, error);
+      logger.error(`Error handling priority_${priority} action:`, error);
       await respond({
         text: '❌ An error occurred while setting the priority.',
         response_type: 'ephemeral',
@@ -314,12 +360,22 @@ app.event('app_home_opened', async ({ event, client, logger }) => {
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\n🛑 Shutting down gracefully...');
-  await app.stop();
+  try {
+    await app.stop();
+    console.log('✅ App stopped successfully');
+  } catch (error) {
+    console.error('Error stopping app:', error);
+  }
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
   console.log('\n🛑 Shutting down gracefully...');
-  await app.stop();
+  try {
+    await app.stop();
+    console.log('✅ App stopped successfully');
+  } catch (error) {
+    console.error('Error stopping app:', error);
+  }
   process.exit(0);
 });
