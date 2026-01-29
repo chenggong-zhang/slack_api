@@ -215,10 +215,18 @@ npm run dev
 
 This uses `nodemon` to automatically restart the app when you make changes to the code.
 
+### Running Tests
+```bash
+npm test
+```
+
+This runs the unit tests to verify the priority detection logic and environment validation.
+
 ### Project Structure
 ```
 slack_api/
 ├── app.js              # Main application file
+├── test.js             # Unit tests
 ├── package.json        # Dependencies and scripts
 ├── .env.example        # Example environment configuration
 ├── .gitignore         # Git ignore rules
