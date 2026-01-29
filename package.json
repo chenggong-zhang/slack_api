@@ -1,0 +1,30 @@
+{
+  "name": "slack-messaging-prioritization",
+  "version": "1.0.0",
+  "description": "A Slack app for intelligent message prioritization with automatic detection and manual tagging",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js",
+    "test": "node test.js"
+  },
+  "keywords": [
+    "slack",
+    "messaging",
+    "prioritization",
+    "productivity",
+    "bolt"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@slack/bolt": "^3.17.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
