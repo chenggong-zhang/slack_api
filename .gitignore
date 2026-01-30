@@ -1,0 +1,17 @@
+# Virtualenv and caches
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Editors/OS
+.DS_Store
+.history/
+
+# Secrets and local env
+.env
+dev.db
+
+# Bytecode
+*.pyc

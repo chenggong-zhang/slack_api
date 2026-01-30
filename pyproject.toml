@@ -1,0 +1,56 @@
+[project]
+name = "slack-digest-bot"
+version = "0.0.1"
+description = "Slack app that tracks channels, provides daily digests, and configurable via natural language."
+authors = [{ name = "Slack Digest Bot" }]
+requires-python = ">=3.10"
+dependencies = [
+  "slack-bolt>=1.19.0",
+  "slack-sdk>=3.27.0",
+  "SQLAlchemy>=2.0.23",
+  "alembic>=1.12.0",
+  "psycopg[binary,pool]>=3.1.12",
+  "pydantic>=2.5.0",
+  "pydantic-settings>=2.0.3",
+  "python-dotenv>=1.0.0",
+  "openai>=1.6.0",
+  "apscheduler>=3.10.4",
+  "cryptography>=41.0.5",
+  "tenacity>=8.2.3",
+  "typing-extensions>=4.9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.4.3",
+  "pytest-asyncio>=0.23.2",
+  "requests-mock>=1.11.0",
+  "ruff>=0.1.13",
+  "black>=23.12.1",
+  "mypy>=1.7.1",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I", "B", "UP", "N", "A", "C4", "TID", "FBT", "PT", "SIM", "PTH", "T20"]
+ignore = ["B008"]
+src = ["slack_digest_bot", "tests"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+plugins = ["sqlalchemy.ext.mypy.plugin"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
